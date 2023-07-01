@@ -1,0 +1,628 @@
+function createProjection() {
+    var yearProjStartRow = 12;
+    var spreadSheet = SpreadsheetApp.getActiveSpreadsheet();
+    var dataSheet = spreadSheet.getSheetByName("data");
+    var cell;
+    var detailRow = 100;
+ 
+    // Create projection sheet
+    var sheetName = dataSheet.getRange("B4").getValue();
+    var newSheet = spreadSheet.getSheetByName(sheetName);
+    var templateSheet = spreadSheet.getSheetByName("template");
+    var RMDSheet = spreadSheet.getSheetByName("RMD");
+
+    if (newSheet != null) {
+        spreadSheet.deleteSheet(newSheet);
+    }
+    
+    newSheet = templateSheet.copyTo(spreadSheet);
+    //newSheet = spreadSheet.insertSheet();
+    newSheet.setName(sheetName);
+    newSheet.showSheet();
+  
+    // Set spacing
+    //newSheet.setColumnWidth(1, 250);
+  
+    // Description
+    var description = newSheet.getRange(1,1,1,4);
+    description.mergeAcross();
+    description.setValue(dataSheet.getRange("B5").getValue());
+    description.setWrap(true);
+  
+    // Retirement Age
+    var birthMonth   = getMonth(dataSheet.getRange("B7").getValue());
+    var birthYear    = dataSheet.getRange("B6").getValue();
+    var retireMonth  = getMonth(dataSheet.getRange("B9").getValue());
+    var retireYear   = dataSheet.getRange("B8").getValue();
+    var yearDiff     = retireYear - birthYear;
+    var age          = yearDiff;
+    if( retireMonth < birthMonth )
+      age--;
+    var projAge      = yearDiff; // projAge is age at end of each year
+    if( birthMonth > retireMonth ) {
+      yearDiff = yearDiff - 1;
+    }     
+    createStringFieldNoDesc(newSheet.getRange("C3"),retireYear,"right");
+    createStringFieldNoDesc(newSheet.getRange("C4"),getMonthStr(retireMonth),"right");
+    createStringFieldNoDesc(newSheet.getRange("C5"),age,"right");
+  
+  
+    // Retirement Savings
+    var retirementSavings = dataSheet.getRange("B10").getValue();
+    createDollarFieldNoDesc(newSheet.getRange("C7"),retirementSavings);
+  
+    // Rate of return
+    var rateOfReturnPctByYear = dataSheet.getRange("B11").getValue();
+    var rateOfReturnPctByMonth = rateOfReturnPctByYear / 12;
+    createPercentFieldNoDesc(newSheet.getRange("C8"),rateOfReturnPctByYear);
+  
+    // Inflation
+    var inflationPctByYear = dataSheet.getRange("B12").getValue();
+    var inflationPctByMonth = rateOfReturnPctByYear / 12;
+    createPercentFieldNoDesc(newSheet.getRange("C9"),inflationPctByYear);
+  
+    createRangeFields(dataSheet, newSheet);
+  
+    var startYear = dataSheet.getRange("C16").getValue();
+    var startMonth = dataSheet.getRange("B16").getValue();
+    if( dataSheet.getRange("F17").getValue() > 0 ) {
+      if( dataSheet.getRange("C17").getValue() < startYear) {
+         startYear = dataSheet.getRange("C17").getValue();
+         startMonth = dataSheet.getRange("C17").getValue();
+      }
+    }
+    if( dataSheet.getRange("F18").getValue() > 0 ) {
+      if( dataSheet.getRange("C18").getValue() < startYear ) {
+         startYear = dataSheet.getRange("C18").getValue();
+         startMonth = dataSheet.getRange("C18").getValue();
+      }
+    }
+    if( dataSheet.getRange("F19").getValue() > 0 ) {
+      if( dataSheet.getRange("C19").getValue() < startYear ) {
+         startYear = dataSheet.getRange("C19").getValue();
+         startMonth = dataSheet.getRange("C19").getValue();
+      }
+    }
+    startMonth = getMonth(startMonth);
+  
+    var endYear = dataSheet.getRange("E16").getValue();
+    var endMonth = dataSheet.getRange("D16").getValue();
+    if( dataSheet.getRange("F17").getValue() > 0 ) {
+      if( dataSheet.getRange("E17").getValue() > endYear ) {
+         endYear = dataSheet.getRange("E17").getValue();
+         endMonth = dataSheet.getRange("D17").getValue();
+       }
+    }
+    if( dataSheet.getRange("F18").getValue() > 0 ) {
+      if( dataSheet.getRange("E18").getValue() > endYear ) {
+         endYear = dataSheet.getRange("E18").getValue();
+         endMonth = dataSheet.getRange("D18").getValue();
+      }
+    }
+    if( dataSheet.getRange("F19").getValue() > 0 ) {
+      if( dataSheet.getRange("E19").getValue() > endYear ) {
+        endYear = dataSheet.getRange("E19").getValue();
+        endMonth = dataSheet.getRange("D19").getValue();
+      }
+    }
+    endMonth = getMonth(endMonth);
+
+    var yearlyOtherIncome = 0;
+    var yearlySavingsIncome = 0;
+    var yearlySSIncome = 0;
+    var accumulatedOtherIncome = 0;
+    var accumulatedSavingsIncome = 0;
+    var accumulatedSSIncome = 0;
+    var accumulatedTotalIncome = 0;
+    var accumulatedTotalIncomeAfterTaxes = 0;
+    var income = 0;
+    var yearendBalance = retirementSavings;  
+    var prevYearAmount = (-1);
+    var accumulatedTaxes = 0;
+  
+    for( var year=startYear; year<=endYear; year++ ) {
+      var projRow = 35+(year-startYear);
+      var projAge = year - birthYear; // projAge is age at end of each year
+          
+      
+      // Get target income
+      var targetIncome = calculateTargetIncome(dataSheet, year, prevYearAmount, inflationPctByYear);
+      prevYearAmount = targetIncome;
+      
+      // Determine months for this year
+      var months = 12;
+      if( startYear == endYear ) {
+        months = endMonth - startMonth + 1;
+      }
+      else {
+        if( year == startYear ) {
+          months = (12-startMonth)+1;
+        }
+        if( year == endYear ) {
+          months = endMonth;
+        }
+      }               
+      
+      var monthlyTargetIncome = targetIncome/months;
+
+      // iterate months for this year, perform calculations
+      for( var month=1; month<=months; month++ ) {
+         var monthlyOtherIncome = getMonthlyOtherIncome(dataSheet,year,month);
+         yearlyOtherIncome += monthlyOtherIncome;
+         var monthlySSIncome = getMonthlySSIncome(dataSheet,year,month);
+         yearlySSIncome += monthlySSIncome;
+         var monthlyShortfall = monthlyTargetIncome - (monthlySSIncome + monthlyOtherIncome);
+         if( monthlyShortfall < 0 )
+           monthlyShortfall = 0;
+         if( yearendBalance < monthlyShortfall ) {
+           yearlySavingsIncome = yearlySavingsIncome + yearendBalance;
+           yearendBalance = 0;      
+         }
+         else {
+           yearendBalance = yearendBalance - monthlyShortfall;
+           yearendBalance = yearendBalance + (yearendBalance * rateOfReturnPctByMonth);
+           yearlySavingsIncome = yearlySavingsIncome + monthlyShortfall;
+         }        
+      }
+
+      // *********************************************************************************
+      // Calculate Required Minimum Distribution (RMD)
+      // *********************************************************************************
+      rmd=0;
+      if(projAge > 72 && birthYear < 1960) {
+          rmdX = projAge - 73 + 1;
+          rmdFactor=RMDSheet.getRange(rmdX,2).getValue();
+          rmd=yearendBalance/rmdFactor;
+      }
+      if(projAge > 74 && birthYear > 1959) {
+          rmdX = projAge - 75 + 1;
+          rmdFactor=RMDSheet.getRange(rmdX,2).getValue();
+          rmd=yearendBalance/rmdFactor;
+      }
+
+      if( yearlySavingsIncome < rmd ) {
+        yearlySavingsIncome = rmd;
+      }
+
+      accumulatedOtherIncome = accumulatedOtherIncome + yearlyOtherIncome;
+      accumulatedSSIncome = accumulatedSSIncome + yearlySSIncome;
+      accumulatedSavingsIncome = accumulatedSavingsIncome + yearlySavingsIncome;
+      income = yearlySSIncome + yearlySavingsIncome + yearlyOtherIncome;
+      accumulatedTotalIncome = accumulatedTotalIncome + income;
+
+      // *********************************************************************************
+      // calculate taxes
+      // *********************************************************************************
+      //    first, do federal (based on 2023 tax code)
+      //    Tax rate	Taxable income bracket	Taxes owed
+      //    10%	$0 to $20,550:        10% of taxable income.
+      //    12%	$20,551 to $83,550:	  $2,055 plus 12% of the amount over $20,550.
+      //    22%	$83,551 to $178,150:	$9,615 plus 22% of the amount over $83,550.
+      //    24%	$178,151 to $340,100:	$30,427 plus 24% of the amount over $178,150.
+      //
+      //    Married and filing jointly std. deduction in 2023 is 27700
+      //
+      //    SS Tax details
+      //    Less than $25,000 single/$32,000 joint: 0% taxable.
+      //    $25,000 to $34,000 single/$32,000 to $44,000 joint: up to 50% taxable.
+      //    Greater than $34,000 single/$44,000 joint: up to 85% taxable.
+      //    * Provisional Income (PI) is calculated as the AGI Less Social Security 
+      //      benefits plus Tax-Free Interest, plus 1/2 Social Security benefits. 
+      //
+      calculatedTaxes = 0;
+      fedTaxRate      = 0;
+      stdDeduction    = 27700;
+      adjustedIncome  = income - stdDeduction - yearlySSIncome;
+      if(adjustedIncome < 0) {
+        adjustedIncome = 0;
+      }
+      provisionalIncome = adjustedIncome + (yearlySSIncome/2)
+
+      // Calculate SS taxes
+      if(provisionalIncome < 32000 ) {
+        // no tax owed
+      }
+      else if(provisionalIncome < 44001) {
+        // 50% taxable
+        adjustedIncome = provisionalIncome;
+      }
+      else {
+        adjustedIncome = adjustedIncome + (yearlySSIncome*.85);
+      }
+
+      if( adjustedIncome < 20551 ) {
+        calculatedTaxes = adjustedIncome * .10;
+        if(adjustedIncome > 0)
+            fedTaxRate = .10;
+      }
+      else if( adjustedIncome < 83551 ) {
+        calculatedTaxes = 2055 + ((adjustedIncome-20550)*.12);
+        fedTaxRate = .12;
+      }
+      else if( adjustedIncome < 178151 ) {
+        calculatedTaxes = 9615 + ((adjustedIncome-83550)*.22);
+        fedTaxRate = .22;
+      }
+      else {
+        calculatedTaxes = 30427 + ((adjustedIncome-178150)*.24);
+        fedTaxRate = .24;
+      }
+
+      // Add in state taxes
+      calculatedTaxes  = calculatedTaxes + (adjustedIncome * dataSheet.getRange("E10").getValue());
+
+      // accumulate taxes
+      accumulatedTaxes = accumulatedTaxes + calculatedTaxes;
+
+      // calculate take home after taxes
+      incomeAfterTaxes = income - calculatedTaxes;
+      accumulatedTotalIncomeAfterTaxes = accumulatedTotalIncomeAfterTaxes + incomeAfterTaxes;
+      // *********************************************************************************
+      // *********************************************************************************
+
+
+      // *********************************************************************************
+      // Create fields for each column in report
+      // *********************************************************************************
+      createStringFieldNoDesc(newSheet.getRange(projRow,1),year,"right");
+      createStringFieldNoDesc(newSheet.getRange(projRow,2),projAge,"right");
+      createDollarFieldNoDesc(newSheet.getRange(projRow,3),targetIncome);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,4),rmd);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,5),income);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,6),incomeAfterTaxes);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,7),yearendBalance);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,8),yearlySavingsIncome);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,9),accumulatedSavingsIncome);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,10),yearlySSIncome);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,11),accumulatedSSIncome);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,12),yearlyOtherIncome);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,13),accumulatedOtherIncome);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,14),accumulatedTotalIncome);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,15),accumulatedTotalIncomeAfterTaxes);
+      createDollarFieldNoDesc(newSheet.getRange(projRow,16),calculatedTaxes);
+      createPercentFieldNoDesc(newSheet.getRange(projRow,17),fedTaxRate);
+      createPercentFieldNoDesc(newSheet.getRange(projRow,18),(calculatedTaxes/income));
+      createDollarFieldNoDesc(newSheet.getRange(projRow,19),accumulatedTaxes);
+      
+      yearlyOtherIncome = 0;
+      yearlySavingsIncome = 0;
+      yearlySSIncome = 0;
+      income = 0;
+    }
+}
+
+var prevYearCalculation = (-1);
+function calculateTargetIncome(ss, year, prevYearAmount, inflationPctByYear) {
+  var retAmount = 0;
+  var desiredRow = 16;
+
+  for( var row = desiredRow; row < (desiredRow+4); row++ ) {
+    var amount = ss.getRange(row,6).getValue();
+    if( amount > 0 ) {
+      var startYear  = ss.getRange(row,3).getValue();
+      var startMonth = getMonth(ss.getRange(row,2).getValue());
+      var stopYear   = ss.getRange(row,5).getValue();
+      var stopMonth  = getMonth(ss.getRange(row,4).getValue()); 
+      
+      if( year == startYear && year == stopYear ) {
+        retAmount = ((stopMonth-startMonth)+1)*amount;
+      }
+      else {
+        if( year == startYear ) {
+          retAmount += (((12-startMonth)+1)*amount); 
+        }
+        if( year == stopYear ) {
+          retAmount += stopMonth*amount;
+        }
+        if( year > startYear && year < stopYear ) {
+          retAmount += 12*amount
+        }
+      }
+    }
+  }
+  if( retAmount == prevYearCalculation ) {
+    prevYearCalculation = retAmount;
+    retAmount = prevYearAmount * (1+inflationPctByYear);
+  }
+  else {
+    prevYearCalculation = retAmount;
+  }
+
+  return retAmount;
+}
+
+function createRangeFields(dataSheet, newSheet) {
+     // Desired Monthly Income
+     var desiredMonthlyIncome = dataSheet.getRange("F16").getValue();
+     if( desiredMonthlyIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F13"),desiredMonthlyIncome);
+         createStringFieldNoDesc(newSheet.getRange("B13"),dataSheet.getRange("B16").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C13"),dataSheet.getRange("C16").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D13"),dataSheet.getRange("D16").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E13"),dataSheet.getRange("E16").getValue(),"center");
+     }
+     var desiredMonthlyIncome = dataSheet.getRange("F17").getValue();
+     if( desiredMonthlyIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F14"),desiredMonthlyIncome);
+         createStringFieldNoDesc(newSheet.getRange("B14"),dataSheet.getRange("B17").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C14"),dataSheet.getRange("C17").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D14"),dataSheet.getRange("D17").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E14"),dataSheet.getRange("E17").getValue(),"center");
+     }
+     var desiredMonthlyIncome = dataSheet.getRange("F18").getValue();
+     if( desiredMonthlyIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F15"),desiredMonthlyIncome);
+         createStringFieldNoDesc(newSheet.getRange("B15"),dataSheet.getRange("B18").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C15"),dataSheet.getRange("C18").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D15"),dataSheet.getRange("D18").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E15"),dataSheet.getRange("E18").getValue(),"center");
+     }
+     var desiredMonthlyIncome = dataSheet.getRange("F19").getValue();
+     if( desiredMonthlyIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F16"),desiredMonthlyIncome);
+         createStringFieldNoDesc(newSheet.getRange("B16"),dataSheet.getRange("B19").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C16"),dataSheet.getRange("C19").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D16"),dataSheet.getRange("D19").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E16"),dataSheet.getRange("E19").getValue(),"center");
+     }
+  
+     // Social Security Income
+     var socialSecurityIncome = dataSheet.getRange("F23").getValue();
+     if( socialSecurityIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F20"),socialSecurityIncome);
+         createStringFieldNoDesc(newSheet.getRange("A20"),dataSheet.getRange("A23").getValue(),"right");
+         createStringFieldNoDesc(newSheet.getRange("B20"),dataSheet.getRange("B23").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C20"),dataSheet.getRange("C23").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D20"),dataSheet.getRange("D23").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E20"),dataSheet.getRange("E23").getValue(),"center");
+     }
+     var socialSecurityIncome = dataSheet.getRange("F24").getValue();
+     if( socialSecurityIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F21"),socialSecurityIncome);
+         createStringFieldNoDesc(newSheet.getRange("A21"),dataSheet.getRange("A24").getValue(),"right");
+         createStringFieldNoDesc(newSheet.getRange("B21"),dataSheet.getRange("B24").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C21"),dataSheet.getRange("C24").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D21"),dataSheet.getRange("D24").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E21"),dataSheet.getRange("E24").getValue(),"center");
+     }
+     var socialSecurityIncome = dataSheet.getRange("F25").getValue();
+     if( socialSecurityIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F22"),socialSecurityIncome);
+         createStringFieldNoDesc(newSheet.getRange("A22"),dataSheet.getRange("A25").getValue(),"right");
+         createStringFieldNoDesc(newSheet.getRange("B22"),dataSheet.getRange("B25").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C22"),dataSheet.getRange("C25").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D22"),dataSheet.getRange("D25").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E22"),dataSheet.getRange("E25").getValue(),"center");
+     }
+     var socialSecurityIncome = dataSheet.getRange("F26").getValue();
+     if( socialSecurityIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F23"),socialSecurityIncome);
+         createStringFieldNoDesc(newSheet.getRange("A23"),dataSheet.getRange("A26").getValue(),"right");
+         createStringFieldNoDesc(newSheet.getRange("B23"),dataSheet.getRange("B26").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C23"),dataSheet.getRange("C26").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D23"),dataSheet.getRange("D26").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E23"),dataSheet.getRange("E26").getValue(),"center");
+     }
+
+     // Other Monthly Income
+     var otherMonthlyIncome = dataSheet.getRange("F30").getValue();
+     if( otherMonthlyIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F27"),otherMonthlyIncome);
+         createStringFieldNoDesc(newSheet.getRange("B27"),dataSheet.getRange("B30").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C27"),dataSheet.getRange("C30").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D27"),dataSheet.getRange("D30").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E27"),dataSheet.getRange("E30").getValue(),"center");
+     }
+     var otherMonthlyIncome = dataSheet.getRange("F31").getValue();
+     if( otherMonthlyIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F28"),otherMonthlyIncome);
+         createStringFieldNoDesc(newSheet.getRange("B28"),dataSheet.getRange("B31").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C28"),dataSheet.getRange("C31").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D28"),dataSheet.getRange("D31").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E28"),dataSheet.getRange("E31").getValue(),"center");
+     }
+     var otherMonthlyIncome = dataSheet.getRange("F32").getValue();
+     if( otherMonthlyIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F29"),otherMonthlyIncome);
+         createStringFieldNoDesc(newSheet.getRange("B29"),dataSheet.getRange("B32").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C29"),dataSheet.getRange("C32").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D29"),dataSheet.getRange("D32").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E29"),dataSheet.getRange("E32").getValue(),"center");
+     }
+     var otherMonthlyIncome = dataSheet.getRange("F33").getValue();
+     if( otherMonthlyIncome > 0 ) {
+         createDollarFieldNoDesc(newSheet.getRange("F30"),otherMonthlyIncome);
+         createStringFieldNoDesc(newSheet.getRange("B30"),dataSheet.getRange("B33").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("C30"),dataSheet.getRange("C33").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("D30"),dataSheet.getRange("D33").getValue(),"center");
+         createStringFieldNoDesc(newSheet.getRange("E30"),dataSheet.getRange("E33").getValue(),"center");
+     }  
+}
+
+function getMonthlySSIncome(dataSheet, year, month) {
+  var returnValue = 0;
+  for( var row = 23; row <= 26; row++ ) {
+    var amount = dataSheet.getRange(row,6).getValue();
+    if( amount > 0 ) {
+      var startYear = dataSheet.getRange(row,3).getValue();
+      var startMonth = getMonth(dataSheet.getRange(row,2).getValue());
+      var endMonth = getMonth(dataSheet.getRange(row,4).getValue());
+      var endYear = dataSheet.getRange(row,5).getValue();
+
+      if( year > startYear && year < endYear ) {
+        returnValue += amount;
+      }
+      if( year == startYear && month >= startMonth ) {
+        returnValue += amount;
+      }
+      if( endYear == year && month <= endMonth ) {
+        returnValue += amount;
+      }
+    }
+  }
+  return returnValue;
+}
+
+function getMonthlyOtherIncome(dataSheet, year, month) {
+  var returnValue = 0;
+  for( var row = 30; row <= 33; row++ ) {
+    var amount = dataSheet.getRange(row,6).getValue();
+    if( amount > 0 ) {
+      var startYear = dataSheet.getRange(row,3).getValue();
+      var startMonth = getMonth(dataSheet.getRange(row,2).getValue());
+      var endMonth = getMonth(dataSheet.getRange(row,4).getValue());
+      var endYear = dataSheet.getRange(row,5).getValue();
+
+      if( year > startYear && year < endYear ) {
+        returnValue += amount;
+      }
+      if( year == startYear && month >= startMonth ) {
+        returnValue += amount;
+      }
+      if( endYear == year && month <= endMonth ) {
+        returnValue += amount;
+      }
+    }
+  }
+  return returnValue;
+}
+
+function createStringFieldNoDesc(valueCell,value,align) {
+    valueCell.setValue(value);
+    valueCell.setHorizontalAlignment(align);
+}
+
+function createStringField(descriptionCell,valueCell,description,value) {
+    descriptionCell.setValue(description);
+    descriptionCell.setHorizontalAlignment("right");
+    valueCell.setValue(value);
+    valueCell.setHorizontalAlignment("center");
+}
+
+function createDollarField(descriptionCell,valueCell,description,value) {
+    descriptionCell.setValue(description);
+    descriptionCell.setHorizontalAlignment("right");
+    createDollarFieldNoDesc(valueCell,value);
+}
+      
+function createDollarFieldNoDesc(valueCell,value) {
+  valueCell.setValue(value);
+  if( value > 0 ) {
+    valueCell.setHorizontalAlignment("right");
+    valueCell.setNumberFormat("$#,###,###.00");
+  }
+  else if( value < 0 ) {
+    valueCell.setHorizontalAlignment("right");
+    valueCell.setNumberFormat("$#,###,###.00");
+    valueCell.setFontColor("red");
+  }
+  else {
+    valueCell.setHorizontalAlignment("center");
+    valueCell.setValue("--");
+  } 
+}
+
+function createDollarFormulaNoDesc(cell,formula) {
+  cell.setFormula(formula);
+  cell.setHorizontalAlignment("right");
+  cell.setNumberFormat("$#,###,###.00");
+}
+
+function createPercentField(descriptionCell,valueCell,description,value) {
+    descriptionCell.setValue(description);
+    descriptionCell.setHorizontalAlignment("right");
+    valueCell.setValue(value);
+    valueCell.setHorizontalAlignment("right");
+    valueCell.setNumberFormat("##.00%");
+}
+
+function createPercentFieldNoDesc(valueCell,value) {
+    valueCell.setValue(value);
+    valueCell.setHorizontalAlignment("right");
+    valueCell.setNumberFormat("##.00%");
+}
+
+function getMonth(month) {
+  
+  if( "January" == month ) {
+    return 1;
+  }
+  if( "February" == month ) {
+    return 2;
+  }
+  if( "March" == month ) {
+    return 3;
+  }
+  if( "April" == month ) {
+    return 4;
+  }
+  if( "May" == month ) {
+    return 5;
+  }
+  if( "June" == month ) {
+    return 6;
+  }
+  if( "July" == month ) {
+    return 7;
+  }
+  if( "August" == month ) {
+    return 8;
+  }
+  if( "September" == month ) {
+    return 9;
+  }
+  if( "October" == month ) {
+    return 10;
+  }
+  if( "November" == month ) {
+    return 11;
+  }
+  if( "December" == month ) {
+    return 12;
+  }
+  return 0;  
+
+}
+
+function getMonthStr(month) {
+  
+  if( 1 == month ) {
+    return "January";
+  }
+  if( 2 == month ) {
+    return "February";
+  }
+  if( 3 == month ) {
+    return "March";
+  }
+  if( 4 == month ) {
+    return "April";
+  }
+  if( 5 == month ) {
+    return "May";
+  }
+  if( 6 == month ) {
+    return "June";
+  }
+  if( 7 == month ) {
+    return "July";
+  }
+  if( 8 == month ) {
+    return "August";
+  }
+  if( 9 == month ) {
+    return "September";
+  }
+  if( 10 == month ) {
+    return "October";
+  }
+  if( 11 == month ) {
+    return "November";
+  }
+  if( 12 == month ) {
+    return "December";
+  }
+  return "??????";  
+
+}
+
