@@ -1,6 +1,6 @@
 # Retirement
 
-This page is for instructions on how to use the shared-retirement spreadsheet.  This spreadsheet is designed to help provide projections on different scenarios for managing retirement income.  The shared spreadsheet can be found [here](https://docs.google.com/spreadsheets/d/1t1UhcKPNJGA-z2gj0E3bHcslP_L6-d0Wk5J9ExZc4_w/edit#gid=0).  
+This page is for instructions on how to use the shared-retirement spreadsheet.  This spreadsheet is designed to help provide projections on different scenarios for managing retirement income.  The shared spreadsheet can be found [here](https://google.com/sheets).  This location is simply your personal repository of google spreadsheets.  When the `shared-retirement` spreadsheet is shared with you it will become visible in your personal repository.
 
 ## Important Note
 The Shared-Retirement spreadsheet is just as it is named, **shared**.  This means, if you update the sheet in its current location, you will be allowing anyone else that has access to see your information.  So, I would strongly suggest you clone the sheet prior to using it.  That will ensure it is private for your use only.  To copy the Shared-Retirement spreadsheet to a local, personal copy, simply open the Shared-Retirement spreadsheet and click `File>Make a copy`.
