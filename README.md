@@ -6,7 +6,7 @@ This page is for instructions on how to use the shared-retirement spreadsheet.  
 The Shared-Retirement spreadsheet is just as it is named, **shared**.  This means, if you update the sheet in its current location, you will be allowing anyone else that has access to see your information.  So, I would strongly suggest you clone the sheet prior to using it.  That will ensure it is private for your use only.  To copy the Shared-Retirement spreadsheet to a local, personal copy, simply open the Shared-Retirement spreadsheet and click `File>Make a copy`.
 
 ## How to use
-At the high level, the spreadsheet uses the `data` tab to as input.  Behond the scene is a script that takes the input from the `data` sheet and creates a new sheet (aka `tab`) to display the results.  Clicking the `Create Projection` button will generate the new sheet.  The name of the page is determined by the content of the `Name` field on the `data` sheet.  Most of the input fields on the `data` sheet are self-explanatory.  Below is an attempt to clarify some of the details for these values.
+At the high level, the spreadsheet uses the `data` tab to as input.  Behind the scenes is a script that takes the input from the `data` sheet and creates a new sheet (aka `tab`) to display the results.  Clicking the `Create Projection` button will generate the new sheet.  The name of the page is determined by the content of the `Name` field on the `data` sheet.  Most of the input fields on the `data` sheet are self-explanatory.  Below is an attempt to clarify some of the details for these values.
 
 ### *Total retirement savings*
 This is the total of your savings, 401k, stocks, bonds and any other source of financial assets you plan on using to fund your retirement.  
